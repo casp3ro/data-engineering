@@ -1,0 +1,30 @@
+[project]
+name = "car-price-pipeline"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+  "pyspark==3.5.0",
+  "delta-spark==3.0.0",
+  "kafka-python==2.0.2",
+  "dbt-spark[PyHive]==1.7.0",
+  "polars>=0.20.0",
+  "pydantic>=2.0.0",
+  "streamlit>=1.30.0",
+  "plotly>=5.0.0",
+  "minio>=7.0.0",
+  "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=7.0.0",
+  "pytest-mock>=3.0.0",
+  "ruff>=0.3.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 88

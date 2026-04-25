@@ -1,0 +1,17 @@
+name: car_price
+version: "1.0.0"
+config-version: 2
+profile: car_price
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+models:
+  car_price:
+    silver:
+      +materialized: view
+      +file_format: delta
+    gold:
+      +materialized: table
+      +file_format: delta
+      +location_root: s3a://gold

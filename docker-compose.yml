@@ -1,0 +1,120 @@
+version: "3.8"
+
+networks:
+  pipeline:
+    driver: bridge
+
+volumes:
+  minio_data:
+  airflow_db:
+
+services:
+  minio:
+    image: minio/minio:latest
+    networks: [pipeline]
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    networks: [pipeline]
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    networks: [pipeline]
+    ports:
+      - "9092:9092"
+    depends_on: [zookeeper]
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    networks: [pipeline]
+    ports:
+      - "8085:8080"
+    depends_on: [kafka]
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+
+  spark-master:
+    image: bitnamilegacy/spark:3.5.0
+    networks: [pipeline]
+    ports:
+      - "8081:8080"
+      - "7077:7077"
+    environment:
+      SPARK_MODE: master
+    volumes:
+      - ./src:/opt/bitnami/spark/src
+      - ./data:/opt/bitnami/spark/data
+
+  spark-worker:
+    image: bitnamilegacy/spark:3.5.0
+    networks: [pipeline]
+    depends_on: [spark-master]
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+
+  airflow:
+    image: apache/airflow:2.8.0-python3.11
+    networks: [pipeline]
+    ports:
+      - "8080:8080"
+    depends_on: [kafka, spark-master, minio]
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./src:/opt/airflow/src
+      - ./dbt:/opt/airflow/dbt
+      - ./data:/opt/airflow/data
+      - airflow_db:/opt/airflow
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    command: >
+      bash -c "
+        pip install apache-airflow-providers-apache-spark &&
+        airflow db init &&
+        airflow users create --username admin --password admin
+          --firstname Admin --lastname User --role Admin
+          --email admin@example.com &&
+        airflow webserver & airflow scheduler
+      "
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    networks: [pipeline]
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./src/interfaces/dashboard:/app
+      - ./data:/app/data
+    command: streamlit run /app/app.py
