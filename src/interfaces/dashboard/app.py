@@ -32,7 +32,7 @@ st.subheader("Median Price by Make — Top 20")
 makes = load("mart_price_by_make")
 st.plotly_chart(
     px.bar(makes.head(20), x="make", y="median_price",
-           color="listing_count", color_continuous_scale="RdYlGn",
+           color="listing_count", color_continuous_scale="Plasma",
            labels={"median_price": "Median Price ($)", "make": "Make"}),
     use_container_width=True,
 )
@@ -50,7 +50,7 @@ geo = load("mart_price_by_state")
 st.plotly_chart(
     px.choropleth(geo, locations="state", locationmode="USA-states",
                   color="median_price", scope="usa",
-                  color_continuous_scale="RdYlGn",
+                  color_continuous_scale="Plasma",
                   labels={"median_price": "Median Price ($)"}),
     use_container_width=True,
 )
