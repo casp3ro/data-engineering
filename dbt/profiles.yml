@@ -2,9 +2,6 @@ car_price:
   target: local
   outputs:
     local:
-      type: spark
-      method: thrift
-      host: localhost
-      port: 10000
-      schema: gold
+      type: duckdb
+      path: "../data/warehouse.duckdb"
       threads: 4

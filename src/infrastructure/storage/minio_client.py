@@ -1,6 +1,7 @@
 from minio import Minio
+from minio.error import S3Error
 
-BUCKETS = ["bronze", "silver", "gold"]
+BUCKETS = ["bronze", "silver", "gold", "warehouse"]
 
 
 class MinioClient:
@@ -19,8 +20,14 @@ class MinioClient:
 
     def setup_buckets(self) -> None:
         for bucket in BUCKETS:
-            if not self._client.bucket_exists(bucket):
-                self._client.make_bucket(bucket)
-                print(f"Created bucket: {bucket}")
-            else:
-                print(f"Bucket exists: {bucket}")
+            try:
+                if not self._client.bucket_exists(bucket):
+                    self._client.make_bucket(bucket)
+                    print(f"Created bucket: {bucket}")
+                else:
+                    print(f"Bucket exists: {bucket}")
+            except S3Error as e:
+                if e.code in {"BucketAlreadyExists", "BucketAlreadyOwnedByYou"}:
+                    print(f"Bucket exists: {bucket}")
+                    continue
+                raise

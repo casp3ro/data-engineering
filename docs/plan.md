@@ -358,7 +358,7 @@ def get_spark_session(app_name: str = "CarPricePipeline") -> SparkSession:
                 "org.apache.hadoop.fs.s3a.S3AFileSystem")
         # Packages
         .config("spark.jars.packages",
-                "io.delta:delta-core_2.12:3.0.0,"
+                "io.delta:delta-spark_2.12:3.2.0,"
                 "org.apache.hadoop:hadoop-aws:3.3.4")
         .getOrCreate()
     )

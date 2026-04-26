@@ -8,3 +8,4 @@ WHERE
     AND mileage BETWEEN 0  AND 500000
     AND make NOT IN ('', 'unknown')
     AND state IS NOT NULL
+    AND LENGTH(state) = 2

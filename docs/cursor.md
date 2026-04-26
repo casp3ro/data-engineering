@@ -334,7 +334,7 @@ def get_spark_session(app_name: str = "CarPricePipeline") -> SparkSession:
         )
         .config(
             "spark.jars.packages",
-            "io.delta:delta-core_2.12:3.0.0,"
+            "io.delta:delta-spark_2.12:3.2.0,"
             "org.apache.hadoop:hadoop-aws:3.3.4,"
             "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0",
         )
@@ -830,7 +830,7 @@ default_args = {
 }
 
 SPARK_PACKAGES = (
-    "io.delta:delta-core_2.12:3.0.0,"
+    "io.delta:delta-spark_2.12:3.2.0,"
     "org.apache.hadoop:hadoop-aws:3.3.4,"
     "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0"
 )

@@ -4,7 +4,7 @@ SELECT
     make,
     year,
     COUNT(*)                         AS listing_count,
-    ROUND(PERCENTILE(price, 0.5), 0) AS median_price
+    ROUND(MEDIAN(price), 0) AS median_price
 FROM {{ ref('int_listings_valid') }}
 WHERE make IN (
     SELECT make FROM {{ ref('mart_price_by_make') }}

@@ -80,6 +80,31 @@ services:
       SPARK_WORKER_MEMORY: 2G
       SPARK_WORKER_CORES: 2
 
+  spark-thriftserver:
+    image: bitnamilegacy/spark:3.5.0
+    networks: [pipeline]
+    depends_on: [spark-master, minio]
+    ports:
+      - "10000:10000"
+    environment:
+      SPARK_MODE: master
+    command: >
+      bash -c "
+        /opt/bitnami/spark/sbin/start-thriftserver.sh
+          --master spark://spark-master:7077
+          --hiveconf hive.server2.thrift.port=10000
+          --hiveconf hive.server2.thrift.bind.host=0.0.0.0
+          --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension
+          --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog
+          --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000
+          --conf spark.hadoop.fs.s3a.access.key=minioadmin
+          --conf spark.hadoop.fs.s3a.secret.key=minioadmin
+          --conf spark.hadoop.fs.s3a.path.style.access=true
+          --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
+          --packages io.delta:delta-core_2.12:3.0.0,org.apache.hadoop:hadoop-aws:3.3.4
+        && tail -f /opt/bitnami/spark/logs/*thriftserver*.out
+      "
+
   airflow:
     image: apache/airflow:2.8.0-python3.11
     networks: [pipeline]

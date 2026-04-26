@@ -3,7 +3,7 @@
 SELECT
     make,
     COUNT(*)                         AS listing_count,
-    ROUND(PERCENTILE(price, 0.5), 0) AS median_price,
+    ROUND(MEDIAN(price), 0) AS median_price,
     ROUND(AVG(price), 0)             AS avg_price,
     ROUND(STDDEV(price), 0)          AS price_stddev,
     ROUND(MIN(price), 0)             AS min_price,
