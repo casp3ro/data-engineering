@@ -1,8 +1,43 @@
 # 🚗 Car Price Pipeline
 
-End-to-end data engineering portfolio project. Ingests 350k+ car listings from Craigslist, processes them through a Medallion Architecture (Bronze → Silver → Gold), and serves insights via an interactive dashboard.
+End-to-end data engineering project: ingest ~350k+ car listings (Craigslist), process them through a Medallion Architecture (Bronze → Silver → Gold), and serve insights via an interactive dashboard.
 
-Built entirely on local Docker — no cloud account needed.
+**Runs fully locally on Docker** — no cloud account needed.
+
+---
+
+## TL;DR (what to look at)
+
+- **Dashboard**: `http://localhost:8501` (Streamlit + Plotly)
+- **Airflow**: `http://localhost:8080` (DAG orchestration)
+- **MinIO console**: `http://localhost:9001` (S3-compatible object store)
+- **Kafka UI**: `http://localhost:8085` (streaming / topic inspection)
+- Deep dives: `docs/ARCHITECTURE.md`, `SECURITY.md`, `CONTRIBUTING.md`
+
+## Demo in 2 minutes
+
+Prereqs: Docker + Docker Compose, Python 3.11, Java (JDK), `uv`.
+
+```bash
+docker compose up -d
+uv sync
+
+export SPARK_MASTER_URL="local[*]"
+export MINIO_S3_ENDPOINT="http://localhost:9000"
+
+uv run python scripts/run_all.py
+uv run streamlit run src/interfaces/dashboard/app.py
+```
+
+**You should see**:
+
+- Airflow UI at `http://localhost:8080`
+- Streamlit dashboard at `http://localhost:8501`
+
+## Screenshots
+
+- Dashboard: `docs/assets/dashboard.png` (add screenshot)
+- Airflow DAG: `docs/assets/airflow_dag.png` (add screenshot)
 
 ---
 
@@ -70,6 +105,40 @@ vehicles.csv
 
 ---
 
+## Run modes
+
+### Quick demo (batch)
+
+Best for first-time users. Runs the batch pipeline locally (CSV → Bronze → Silver → dbt → DuckDB) and opens the dashboard.
+
+```bash
+docker compose up -d
+uv sync
+
+export SPARK_MASTER_URL="local[*]"
+export MINIO_S3_ENDPOINT="http://localhost:9000"
+
+uv run python scripts/run_all.py
+uv run streamlit run src/interfaces/dashboard/app.py
+```
+
+### Full demo (end-to-end: streaming + orchestration)
+
+Runs the end-to-end DAG via Airflow (Kafka produce → Spark Structured Streaming to Bronze → Silver → dbt run/test).
+
+```bash
+docker compose up -d
+```
+
+Then:
+
+- Open **Airflow** at `http://localhost:8080` and trigger `car_price_pipeline`
+- Inspect Kafka messages in **Kafka UI** at `http://localhost:8085`
+- Inspect objects in **MinIO console** at `http://localhost:9001`
+- Open **Dashboard** at `http://localhost:8501`
+
+---
+
 ## Quick Start
 
 ### Requirements
@@ -87,9 +156,10 @@ docker compose up -d
 
 Services started:
 
-- MinIO (S3) → http://localhost:9001 `minioadmin / minioadmin`
+- MinIO (S3 API) → http://localhost:9000
+- MinIO Console → http://localhost:9001
 - Apache Spark → http://localhost:8081
-- Apache Airflow → http://localhost:8080 `admin / admin`
+- Apache Airflow → http://localhost:8080
 - Kafka UI → http://localhost:8085
 
 ### 2. Install dependencies
@@ -186,7 +256,7 @@ unique_stg_listings_id      — no duplicate listings
 
 ## Links
 
-- Dataset: https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data
+- Dataset: [Craigslist Cars & Trucks — Austin Reese](https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data)
 - Delta Lake: https://delta.io
 - dbt docs: https://docs.getdbt.com
 - MinIO: https://min.io
