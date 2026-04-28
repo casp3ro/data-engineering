@@ -221,3 +221,4 @@ data
 data/*
 metastore_db/
 spark-warehouse/
+docs/private
