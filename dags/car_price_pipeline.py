@@ -3,7 +3,6 @@ from datetime import datetime, timedelta
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
-from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 
 default_args = {
     "owner": "kacper",
@@ -11,12 +10,6 @@ default_args = {
     "retry_delay": timedelta(minutes=3),
     "email_on_failure": False,
 }
-
-SPARK_PACKAGES = (
-    "io.delta:delta-spark_2.12:3.2.0,"
-    "org.apache.hadoop:hadoop-aws:3.3.4,"
-    "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0"
-)
 
 
 def _produce() -> None:
@@ -29,6 +22,30 @@ def _produce() -> None:
     result = ProduceListings(producer).execute(Path("/opt/airflow/data/raw/vehicles.csv"))
     print(f"Kafka produce: {result}")
     producer.close()
+
+
+def _spark_bronze() -> None:
+    from src.application.stream_to_bronze import StreamToBronze
+    from src.infrastructure.spark.session import get_spark_session
+
+    spark = get_spark_session(app_name="car_price_pipeline_bronze")
+    try:
+        StreamToBronze(spark).run()
+    finally:
+        spark.stop()
+
+
+def _spark_silver() -> None:
+    from src.application.transform_silver import TransformSilver
+    from src.infrastructure.spark.delta_writer import DeltaWriter
+    from src.infrastructure.spark.session import get_spark_session
+
+    spark = get_spark_session(app_name="car_price_pipeline_silver")
+    try:
+        result = TransformSilver(spark, DeltaWriter()).execute()
+        print(f"Transform silver: {result}")
+    finally:
+        spark.stop()
 
 
 with DAG(
@@ -44,18 +61,14 @@ with DAG(
         python_callable=_produce,
     )
 
-    spark_bronze = SparkSubmitOperator(
+    spark_bronze = PythonOperator(
         task_id="spark_bronze",
-        application="/opt/airflow/src/application/stream_to_bronze.py",
-        conn_id="spark_default",
-        packages=SPARK_PACKAGES,
+        python_callable=_spark_bronze,
     )
 
-    spark_silver = SparkSubmitOperator(
+    spark_silver = PythonOperator(
         task_id="spark_silver",
-        application="/opt/airflow/src/application/transform_silver.py",
-        conn_id="spark_default",
-        packages=SPARK_PACKAGES,
+        python_callable=_spark_silver,
     )
 
     dbt_run = BashOperator(

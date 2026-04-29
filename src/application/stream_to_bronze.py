@@ -39,12 +39,20 @@ class StreamToBronze:
             .withColumn("ingested_at", F.current_timestamp())
         )
 
-        query = (
+        writer = (
             parsed.writeStream.format("delta")
             .outputMode("append")
             .option("checkpointLocation", CHECKPOINT)
             .option("mergeSchema", "true")
-            .start(BRONZE_PATH)
         )
+
+        # In Airflow we want a finite task that completes deterministically.
+        # Prefer availableNow on modern Spark, fall back to once for older runtimes.
+        try:
+            writer = writer.trigger(availableNow=True)
+        except TypeError:
+            writer = writer.trigger(once=True)
+
+        query = writer.start(BRONZE_PATH)
 
         query.awaitTermination()
