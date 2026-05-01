@@ -12,6 +12,7 @@ End-to-end data engineering project: ingest ~350k+ car listings (Craigslist), pr
 - **Airflow**: `http://localhost:8080` (DAG orchestration)
 - **MinIO console**: `http://localhost:9001` (S3-compatible object store)
 - **Kafka UI**: `http://localhost:8085` (streaming / topic inspection)
+- **Other exposed ports** (from `docker-compose.yml`): Kafka `9092`, Spark master `7077`, Spark Thrift `10000`
 - Deep dives: `docs/ARCHITECTURE.md`, `SECURITY.md`, `CONTRIBUTING.md`
 
 ## Demo in 2 minutes
@@ -26,7 +27,7 @@ export SPARK_MASTER_URL="local[*]"
 export MINIO_S3_ENDPOINT="http://localhost:9000"
 
 uv run python scripts/run_all.py
-uv run streamlit run src/interfaces/dashboard/app.py
+uv run streamlit run src/interfaces/dashboard/app.py  # don't run if using the `dashboard` service in Docker (same :8501)
 ```
 
 **You should see**:
@@ -119,7 +120,7 @@ export SPARK_MASTER_URL="local[*]"
 export MINIO_S3_ENDPOINT="http://localhost:9000"
 
 uv run python scripts/run_all.py
-uv run streamlit run src/interfaces/dashboard/app.py
+uv run streamlit run src/interfaces/dashboard/app.py  # don't run if using the `dashboard` service in Docker (same :8501)
 ```
 
 ### Full demo (end-to-end: streaming + orchestration)
