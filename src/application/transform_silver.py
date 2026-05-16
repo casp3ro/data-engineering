@@ -1,6 +1,7 @@
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
+from src.domain.constants import EXCLUDED_MAKES, MAX_MILEAGE, MAX_PRICE, MAX_YEAR, MIN_MILEAGE, MIN_PRICE, MIN_YEAR
 from src.infrastructure.spark.delta_writer import DeltaWriter
 
 BRONZE_PATH = "s3a://bronze/listings"
@@ -29,9 +30,9 @@ class TransformSilver:
 
     def _filter(self, df: DataFrame) -> DataFrame:
         return df.filter(
-            F.col("price").between(500, 200_000)
-            & F.col("year").between(1990, 2024)
-            & F.col("mileage").between(0, 500_000)
+            F.col("price").between(MIN_PRICE, MAX_PRICE)
+            & F.col("year").between(MIN_YEAR, MAX_YEAR)
+            & F.col("mileage").between(MIN_MILEAGE, MAX_MILEAGE)
             & F.col("make").isNotNull()
-            & (F.col("make") != "")
+            & (~F.col("make").isin(list(EXCLUDED_MAKES)))
         )

@@ -101,7 +101,7 @@ services:
           --conf spark.hadoop.fs.s3a.secret.key=minioadmin
           --conf spark.hadoop.fs.s3a.path.style.access=true
           --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
-          --packages io.delta:delta-core_2.12:3.0.0,org.apache.hadoop:hadoop-aws:3.3.4
+          --packages io.delta:delta-spark_2.12:3.2.0,org.apache.hadoop:hadoop-aws:3.3.4
         && tail -f /opt/bitnami/spark/logs/*thriftserver*.out
       "
 

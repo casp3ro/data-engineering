@@ -1,17 +1,17 @@
-from unittest.mock import patch
+import os
 
-from src.infrastructure.kafka.producer import ListingProducer
+import pytest
 
-
-def test_send_batch_returns_correct_count() -> None:
-    with patch("src.infrastructure.kafka.producer.KafkaProducer"):
-        producer = ListingProducer()
-        rows = [{"id": str(i), "make": "toyota"} for i in range(10)]
-        assert producer.send_batch(iter(rows)) == 10
+_KAFKA_AVAILABLE = bool(os.getenv("KAFKA_BOOTSTRAP_SERVERS"))
 
 
-def test_send_calls_kafka_send() -> None:
-    with patch("src.infrastructure.kafka.producer.KafkaProducer") as mock_kafka:
-        producer = ListingProducer()
-        producer.send({"id": "abc", "make": "ford"})
-        mock_kafka.return_value.send.assert_called_once()
+@pytest.mark.integration
+@pytest.mark.skipif(not _KAFKA_AVAILABLE, reason="KAFKA_BOOTSTRAP_SERVERS not set")
+def test_producer_connects_and_sends() -> None:
+    from src.infrastructure.kafka.producer import ListingProducer
+
+    bootstrap = os.environ["KAFKA_BOOTSTRAP_SERVERS"]
+    producer = ListingProducer(bootstrap_servers=bootstrap)
+    count = producer.send_batch(iter([{"id": "integration-test", "make": "toyota"}]))
+    producer.close()
+    assert count == 1

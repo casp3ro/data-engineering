@@ -6,40 +6,41 @@ Run the full pipeline in order:
   3. Transform Bronze → Silver Delta
   4. dbt run + dbt test → Gold Delta
 """
+import logging
 import subprocess
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 SCRIPTS = Path(__file__).parent
 
 
 def run(script: str) -> None:
     path = SCRIPTS / script
-    print(f"\n{'='*60}")
-    print(f"Running: {script}")
-    print('='*60)
+    logger.info("--- %s ---", script)
     result = subprocess.run([sys.executable, str(path)])
     if result.returncode != 0:
-        print(f"\nFAILED: {script} exited with code {result.returncode}")
+        logger.error("FAILED: %s exited with code %d", script, result.returncode)
         sys.exit(result.returncode)
-    print(f"OK: {script}")
+    logger.info("OK: %s", script)
 
 
 def main() -> None:
-    print("Car Price Pipeline — Full Run")
-    print("Make sure Docker is running: docker compose ps\n")
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+
+    logger.info("Car Price Pipeline — Full Run")
+    logger.info("Make sure Docker is running: docker compose ps")
 
     run("setup_minio.py")
     run("ingest_to_bronze.py")
     run("transform_silver.py")
     run("run_dbt.py")
 
-    print("\n" + "="*60)
-    print("Pipeline complete.")
-    print("Dashboard: http://localhost:8501")
-    print("MinIO:     http://localhost:9001")
-    print("Airflow:   http://localhost:8080")
-    print("="*60)
+    logger.info("Pipeline complete.")
+    logger.info("Dashboard: http://localhost:8501")
+    logger.info("MinIO:     http://localhost:9001")
+    logger.info("Airflow:   http://localhost:8080")
 
 
 if __name__ == "__main__":

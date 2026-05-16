@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: mart_price_by_make
+    description: "Price statistics per vehicle make. Only makes with >= 50 listings are included."
+    columns:
+      - name: make
+        description: "Vehicle make (lowercase)."
+        tests: [not_null, unique]
+      - name: listing_count
+        description: "Total listings for this make."
+        tests: [not_null]
+      - name: median_price
+        description: "Median sale price in USD."
+        tests: [not_null]
+      - name: avg_price
+        description: "Mean sale price in USD."
+        tests: [not_null]
+      - name: price_stddev
+        description: "Standard deviation of sale price in USD."
+        tests: [not_null]
+      - name: min_price
+        description: "Lowest sale price observed for this make."
+        tests: [not_null]
+      - name: max_price
+        description: "Highest sale price observed for this make."
+        tests: [not_null]

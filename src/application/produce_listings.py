@@ -1,17 +1,20 @@
+import logging
 from pathlib import Path
 
 import polars as pl
 
+from src.application.ports.listing_producer import IListingProducer
 from src.domain.entities.listing import Listing
 from src.domain.value_objects.mileage import Mileage
 from src.domain.value_objects.price import Price
-from src.infrastructure.kafka.producer import ListingProducer
+
+logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 1_000
 
 
 class ProduceListings:
-    def __init__(self, producer: ListingProducer) -> None:
+    def __init__(self, producer: IListingProducer) -> None:
         self._producer = producer
 
     def execute(self, csv_path: Path) -> dict:
@@ -34,7 +37,8 @@ class ProduceListings:
             try:
                 listing = self._parse_row(row)
                 valid.append(listing.to_dict())
-            except Exception:
+            except Exception as e:
+                logger.warning("Failed to parse row id=%s: %s", row.get("id", "?"), e)
                 errors += 1
         return valid, errors
 

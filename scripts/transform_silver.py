@@ -2,37 +2,22 @@
 scripts/transform_silver.py
 Read Bronze Delta from MinIO, clean and filter, write Silver Delta.
 """
-import os
+import logging
+import sys
+from pathlib import Path
 
-from pyspark.sql import SparkSession, DataFrame
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
+from src.domain.constants import EXCLUDED_MAKES, MAX_MILEAGE, MAX_PRICE, MAX_YEAR, MIN_MILEAGE, MIN_PRICE, MIN_YEAR
+from src.infrastructure.spark.session import get_spark_session
+
+logger = logging.getLogger(__name__)
 
 BRONZE_PATH = "s3a://bronze/listings"
-SILVER_PATH = "data/silver/listings"   # lokalnie zamiast MinIO
-
-
-def get_spark() -> SparkSession:
-    return (
-        SparkSession.builder
-        .appName("TransformSilver")
-        .master(os.getenv("SPARK_MASTER_URL", "local[*]"))
-        .config("spark.sql.extensions",           "io.delta.sql.DeltaSparkSessionExtension")
-        .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-        .config("spark.hadoop.fs.s3a.endpoint",    os.getenv("MINIO_S3_ENDPOINT", "http://localhost:9000"))
-        .config("spark.hadoop.fs.s3a.access.key",  "minioadmin")
-        .config("spark.hadoop.fs.s3a.secret.key",  "minioadmin")
-        .config("spark.hadoop.fs.s3a.path.style.access", "true")
-        .config("spark.hadoop.fs.s3a.impl",        "org.apache.hadoop.fs.s3a.S3AFileSystem")
-        .config(
-            "spark.jars.packages",
-            "io.delta:delta-spark_2.12:3.2.0,"
-            "org.apache.hadoop:hadoop-aws:3.3.4",
-        )
-        .config("spark.driver.memory", "4g")
-        .config("spark.sql.shuffle.partitions", "8")
-        .getOrCreate()
-    )
+SILVER_PATH = "s3a://silver/listings"
 
 
 def clean(df: DataFrame) -> DataFrame:
@@ -42,7 +27,7 @@ def clean(df: DataFrame) -> DataFrame:
         .withColumn("model",     F.lower(F.trim(F.col("model"))))
         .withColumn("state",     F.upper(F.trim(F.col("state"))))
         .withColumn("price",     F.col("price").cast("double"))
-        .withColumn("odometer",  F.col("odometer").cast("integer"))
+        .withColumn("mileage",   F.col("mileage").cast("integer"))
         .withColumn("year",      F.col("year").cast("integer"))
         .withColumn("log_price", F.log1p(F.col("price")))
         .dropDuplicates(["id"])
@@ -51,36 +36,39 @@ def clean(df: DataFrame) -> DataFrame:
 
 def filter_valid(df: DataFrame) -> DataFrame:
     return df.filter(
-        F.col("price").between(500, 200_000)
-        & F.col("year").between(1990, 2024)
-        & F.col("odometer").between(0, 500_000)
+        F.col("price").between(MIN_PRICE, MAX_PRICE)
+        & F.col("year").between(MIN_YEAR, MAX_YEAR)
+        & F.col("mileage").between(MIN_MILEAGE, MAX_MILEAGE)
         & F.col("make").isNotNull()
-        & (F.col("make") != "")
+        & (~F.col("make").isin(list(EXCLUDED_MAKES)))
     )
 
 
 def main() -> None:
-    print("Starting Spark...")
-    spark = get_spark()
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+
+    logger.info("Starting Spark...")
+    spark = get_spark_session("TransformSilver")
     spark.sparkContext.setLogLevel("WARN")
 
-    print(f"Reading Bronze from {BRONZE_PATH}...")
+    logger.info("Reading Bronze from %s...", BRONZE_PATH)
     bronze = spark.read.format("delta").load(BRONZE_PATH)
-    print(f"Bronze rows: {bronze.count():,}")
+    logger.info("Bronze rows: %s", f"{bronze.count():,}")
 
-    print("Cleaning and filtering...")
+    logger.info("Cleaning and filtering...")
     silver = filter_valid(clean(bronze))
-    print(f"Silver rows: {silver.count():,}")
+    logger.info("Silver rows: %s", f"{silver.count():,}")
 
-    print(f"Writing Silver to {SILVER_PATH}...")
+    logger.info("Writing Silver to %s...", SILVER_PATH)
     (
         silver.write
-        .format("parquet")
+        .format("delta")
         .mode("overwrite")
+        .option("overwriteSchema", "true")
         .save(SILVER_PATH)
     )
 
-    print("Silver layer ready.")
+    logger.info("Silver layer ready.")
     spark.stop()
 
 

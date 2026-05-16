@@ -7,11 +7,20 @@ st.set_page_config(page_title="Car Price Pipeline", page_icon="🚗", layout="wi
 
 DB_PATH = "data/warehouse.duckdb"
 
+_ALLOWED_TABLES = frozenset({
+    "mart_listings_summary",
+    "mart_price_by_make",
+    "mart_price_by_state",
+    "mart_price_by_year",
+})
+
 
 @st.cache_data
 def load(table: str) -> pd.DataFrame:
+    if table not in _ALLOWED_TABLES:
+        raise ValueError(f"Unknown table: {table!r}")
     conn = duckdb.connect(DB_PATH, read_only=True)
-    df = conn.execute(f"SELECT * FROM {table}").df()
+    df = conn.execute(f"SELECT * FROM {table}").df()  # noqa: S608 — table is whitelisted above
     conn.close()
     return df
 

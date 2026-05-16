@@ -150,7 +150,7 @@ dev = [
 requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
     { name = "dbt-duckdb", specifier = "==1.7.0" },
-    { name = "delta-spark", specifier = "==3.0.0" },
+    { name = "delta-spark", specifier = "==3.2.0" },
     { name = "duckdb", specifier = ">=0.10.0" },
     { name = "kafka-python", specifier = "==2.0.2" },
     { name = "minio", specifier = ">=7.0.0" },
@@ -421,15 +421,15 @@ wheels = [
 
 [[package]]
 name = "delta-spark"
-version = "3.0.0"
+version = "3.2.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "importlib-metadata" },
     { name = "pyspark" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/43/75/1cbb4e6fa21e4a5713d01d92b4573edd1662e6d68b36a0d01e6a7bcac1a4/delta-spark-3.0.0.tar.gz", hash = "sha256:95109ed364b4c68e3f6c628c77eb5e37c02e29e23bb771ddd8b31f66aae0d555", size = 21991, upload-time = "2023-10-17T16:59:46.005Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/38/06/a64cc4e17fe959cf60dc126bf3283fc9f22fc91f000b7f3f5e465338022d/delta-spark-3.2.0.tar.gz", hash = "sha256:641967828e47c64805f8c746513da80bea24b5f19b069cdcf64561cd3692e11d", size = 22147, upload-time = "2024-05-09T17:26:10.754Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b2/1b/7b7e4fafc7af2c04fee0c3b51a148104365d2f2eb3aff0bc22a7ccc068be/delta_spark-3.0.0-py3-none-any.whl", hash = "sha256:98fd66445c1de0e5c276b7bf7fbec73c46c378cf9440a2984f5d208b09b4ffc5", size = 21024, upload-time = "2023-10-17T16:59:44.274Z" },
+    { url = "https://files.pythonhosted.org/packages/3c/8e/bb778f5049aa371bf80a7a781b237eb10ef104f8736fe00d25fcfee80c2b/delta_spark-3.2.0-py3-none-any.whl", hash = "sha256:c4ff3fa7218e58a702cb71eb64384b0005c4d6f0bbdd0fe0b38a53564d946e09", size = 21186, upload-time = "2024-05-09T17:26:09.544Z" },
 ]
 
 [[package]]

@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: mart_listings_summary
+    description: "Single-row aggregate summary across all valid listings."
+    columns:
+      - name: total_listings
+        description: "Total number of valid listings."
+        tests: [not_null]
+      - name: unique_makes
+        description: "Number of distinct vehicle makes."
+        tests: [not_null]
+      - name: states_covered
+        description: "Number of distinct US states with at least one listing."
+        tests: [not_null]
+      - name: overall_median_price
+        description: "Median price in USD across all listings."
+        tests: [not_null]
+      - name: overall_avg_price
+        description: "Mean price in USD across all listings."
+        tests: [not_null]
+      - name: oldest_year
+        description: "Earliest model year present in the dataset."
+        tests: [not_null]
+      - name: newest_year
+        description: "Latest model year present in the dataset."
+        tests: [not_null]

@@ -1,5 +1,10 @@
+import logging
+import os
+
 from minio import Minio
 from minio.error import S3Error
+
+logger = logging.getLogger(__name__)
 
 BUCKETS = ["bronze", "silver", "gold", "warehouse"]
 
@@ -7,14 +12,14 @@ BUCKETS = ["bronze", "silver", "gold", "warehouse"]
 class MinioClient:
     def __init__(
         self,
-        endpoint: str = "localhost:9000",
-        access_key: str = "minioadmin",
-        secret_key: str = "minioadmin",
+        endpoint: str | None = None,
+        access_key: str | None = None,
+        secret_key: str | None = None,
     ) -> None:
         self._client = Minio(
-            endpoint,
-            access_key=access_key,
-            secret_key=secret_key,
+            endpoint or os.getenv("MINIO_ENDPOINT", "localhost:9000"),
+            access_key=access_key or os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
+            secret_key=secret_key or os.getenv("MINIO_SECRET_KEY", "minioadmin"),
             secure=False,
         )
 
@@ -23,11 +28,11 @@ class MinioClient:
             try:
                 if not self._client.bucket_exists(bucket):
                     self._client.make_bucket(bucket)
-                    print(f"Created bucket: {bucket}")
+                    logger.info("Created bucket: %s", bucket)
                 else:
-                    print(f"Bucket exists: {bucket}")
+                    logger.info("Bucket exists: %s", bucket)
             except S3Error as e:
                 if e.code in {"BucketAlreadyExists", "BucketAlreadyOwnedByYou"}:
-                    print(f"Bucket exists: {bucket}")
+                    logger.info("Bucket exists: %s", bucket)
                     continue
                 raise

@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+
+logger = logging.getLogger(__name__)
 
 default_args = {
     "owner": "kacper",
@@ -13,14 +16,16 @@ default_args = {
 
 
 def _produce() -> None:
+    import os
     from pathlib import Path
 
     from src.application.produce_listings import ProduceListings
     from src.infrastructure.kafka.producer import ListingProducer
 
-    producer = ListingProducer(bootstrap_servers="kafka:29092")
+    bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
+    producer = ListingProducer(bootstrap_servers=bootstrap)
     result = ProduceListings(producer).execute(Path("/opt/airflow/data/raw/vehicles.csv"))
-    print(f"Kafka produce: {result}")
+    logger.info("Kafka produce: %s", result)
     producer.close()
 
 
@@ -43,7 +48,7 @@ def _spark_silver() -> None:
     spark = get_spark_session(app_name="car_price_pipeline_silver")
     try:
         result = TransformSilver(spark, DeltaWriter()).execute()
-        print(f"Transform silver: {result}")
+        logger.info("Transform silver: %s", result)
     finally:
         spark.stop()
 

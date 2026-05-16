@@ -1,6 +1,8 @@
 version: 2
 
 sources:
-  - name: bronze
+  - name: silver
+    description: "Spark-cleaned silver Delta tables stored in MinIO"
     tables:
       - name: listings
+        description: "Cleaned, deduplicated vehicle listings produced by the Spark silver job"

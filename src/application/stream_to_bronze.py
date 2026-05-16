@@ -1,3 +1,5 @@
+import os
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import DoubleType, IntegerType, StringType, StructField, StructType
@@ -20,13 +22,16 @@ CHECKPOINT = "s3a://bronze/_checkpoints/listings"
 
 
 class StreamToBronze:
-    def __init__(self, spark: SparkSession) -> None:
+    def __init__(self, spark: SparkSession, bootstrap_servers: str | None = None) -> None:
         self._spark = spark
+        self._bootstrap_servers = bootstrap_servers or os.getenv(
+            "KAFKA_BOOTSTRAP_SERVERS", "kafka:29092"
+        )
 
     def run(self) -> None:
         raw = (
             self._spark.readStream.format("kafka")
-            .option("kafka.bootstrap.servers", "kafka:29092")
+            .option("kafka.bootstrap.servers", self._bootstrap_servers)
             .option("subscribe", "car_listings_raw")
             .option("startingOffsets", "earliest")
             .option("failOnDataLoss", "false")

@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: mart_price_by_year
+    description: >
+      Price depreciation by model year for the top {{ var('top_makes_limit', 10) }} makes
+      ranked by total listing count.
+    columns:
+      - name: make
+        description: "Vehicle make (lowercase)."
+        tests: [not_null]
+      - name: year
+        description: "Model year."
+        tests: [not_null]
+      - name: listing_count
+        description: "Number of listings for this make/year combination."
+        tests: [not_null]
+      - name: median_price
+        description: "Median sale price in USD."
+        tests: [not_null]

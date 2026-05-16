@@ -4,7 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
   "pyspark==3.5.0",
-  "delta-spark==3.0.0",
+  "delta-spark==3.2.0",
   "kafka-python==2.0.2",
   "dbt-duckdb==1.7.0",
   "duckdb>=0.10.0",
@@ -26,6 +26,10 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+markers = [
+    "spark: requires a local PySpark session (slow — needs JVM)",
+    "integration: requires running external services (Kafka, MinIO, Spark cluster)",
+]
 
 [tool.ruff]
 line-length = 88

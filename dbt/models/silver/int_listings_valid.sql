@@ -3,9 +3,9 @@
 SELECT *
 FROM {{ ref('stg_listings') }}
 WHERE
-    price   BETWEEN 500   AND 200000
-    AND year BETWEEN 1990  AND 2024
-    AND mileage BETWEEN 0  AND 500000
+    price   BETWEEN {{ var('min_price') }}   AND {{ var('max_price') }}
+    AND year BETWEEN {{ var('min_year') }}   AND {{ var('max_year') }}
+    AND mileage BETWEEN {{ var('min_mileage') }} AND {{ var('max_mileage') }}
     AND make NOT IN ('', 'unknown')
     AND state IS NOT NULL
     AND LENGTH(state) = 2
@@ -16,4 +16,3 @@ WHERE
         'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC',
         'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'
     )
-
