@@ -1,5 +1,7 @@
 # Architecture
 
+For current maturity, known bugs, and what is not wired end-to-end, see [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+
 ## End-to-end flow
 
 ```mermaid
