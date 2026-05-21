@@ -1,42 +1,109 @@
 version: "3.8"
 
+# Car Price Pipeline — local infra (Databricks edition)
+# Databricks replaces Spark + MinIO for all compute.
+# This compose runs: Kafka, Airflow, Streamlit dashboard.
+
 networks:
-  pipeline:
+  pipeline_net:
     driver: bridge
 
 volumes:
-  minio_data:
-  airflow_db:
+  postgres_data:
+  airflow_logs:
+
+x-airflow-common: &airflow-common
+  build:
+    context: ..
+    dockerfile: Dockerfile.airflow
+  networks: [pipeline_net]
+  environment:
+    AIRFLOW__CORE__EXECUTOR: LocalExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__FERNET_KEY: ${AIRFLOW__CORE__FERNET_KEY}
+    AIRFLOW__WEBSERVER__SECRET_KEY: ${AIRFLOW__WEBSERVER__SECRET_KEY}
+    PYTHONPATH: /opt/airflow
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    KAFKA_TOPIC: ${KAFKA_TOPIC:-car-listings}
+    DATABRICKS_HOST: ${DATABRICKS_HOST}
+    DATABRICKS_TOKEN: ${DATABRICKS_TOKEN}
+    DATABRICKS_JOB_ID: ${DATABRICKS_JOB_ID}
+    WAREHOUSE_PATH: /opt/airflow/data/warehouse.duckdb
+    CAR_PRICE_CSV_PATH: /opt/airflow/data/raw/vehicles.csv
+  volumes:
+    - ../dags:/opt/airflow/dags
+    - ../dbt:/opt/airflow/dbt
+    - ../data:/opt/airflow/data
+    - ../src:/opt/airflow/src
+    - ../kafka:/opt/airflow/kafka
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
 
 services:
-  minio:
-    image: minio/minio:latest
-    networks: [pipeline]
-    ports:
-      - "9000:9000"
-      - "9001:9001"
+  # ── Postgres (Airflow metadata DB) ──────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    networks: [pipeline_net]
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
     volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "pg_isready", "-U", "airflow"]
       interval: 10s
-      timeout: 5s
       retries: 5
 
+  # ── Airflow one-time DB migration ─────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    command: >
+      bash -c "
+        airflow db migrate &&
+        airflow users create --username admin --password admin
+          --firstname Admin --lastname User --role Admin
+          --email admin@example.com || true
+      "
+    restart: "no"
+
+  # ── Airflow webserver ─────────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    command: webserver
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      retries: 5
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ── Airflow scheduler ─────────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+
+  # ── Zookeeper ─────────────────────────────────────────────────────────
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.5.0
-    networks: [pipeline]
+    image: confluentinc/cp-zookeeper:7.6.0
+    networks: [pipeline_net]
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
+  # ── Kafka broker ──────────────────────────────────────────────────────
   kafka:
-    image: confluentinc/cp-kafka:7.5.0
-    networks: [pipeline]
+    image: confluentinc/cp-kafka:7.6.0
+    networks: [pipeline_net]
     ports:
       - "9092:9092"
     depends_on: [zookeeper]
@@ -47,10 +114,15 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      retries: 10
 
+  # ── Kafka UI ──────────────────────────────────────────────────────────
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    networks: [pipeline]
+    networks: [pipeline_net]
     ports:
       - "8085:8080"
     depends_on: [kafka]
@@ -58,94 +130,15 @@ services:
       KAFKA_CLUSTERS_0_NAME: local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
 
-  spark-master:
-    image: bitnamilegacy/spark:3.5.0
-    networks: [pipeline]
-    ports:
-      - "8081:8080"
-      - "7077:7077"
-    environment:
-      SPARK_MODE: master
-    volumes:
-      - ./src:/opt/bitnami/spark/src
-      - ./data:/opt/bitnami/spark/data
-
-  spark-worker:
-    image: bitnamilegacy/spark:3.5.0
-    networks: [pipeline]
-    depends_on: [spark-master]
-    environment:
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
-      SPARK_WORKER_MEMORY: 2G
-      SPARK_WORKER_CORES: 2
-
-  spark-thriftserver:
-    image: bitnamilegacy/spark:3.5.0
-    networks: [pipeline]
-    depends_on: [spark-master, minio]
-    ports:
-      - "10000:10000"
-    environment:
-      SPARK_MODE: master
-    command: >
-      bash -c "
-        /opt/bitnami/spark/sbin/start-thriftserver.sh
-          --master spark://spark-master:7077
-          --hiveconf hive.server2.thrift.port=10000
-          --hiveconf hive.server2.thrift.bind.host=0.0.0.0
-          --conf spark.sql.extensions=io.delta.sql.DeltaSparkSessionExtension
-          --conf spark.sql.catalog.spark_catalog=org.apache.spark.sql.delta.catalog.DeltaCatalog
-          --conf spark.hadoop.fs.s3a.endpoint=http://minio:9000
-          --conf spark.hadoop.fs.s3a.access.key=minioadmin
-          --conf spark.hadoop.fs.s3a.secret.key=minioadmin
-          --conf spark.hadoop.fs.s3a.path.style.access=true
-          --conf spark.hadoop.fs.s3a.impl=org.apache.hadoop.fs.s3a.S3AFileSystem
-          --packages io.delta:delta-spark_2.12:3.2.0,org.apache.hadoop:hadoop-aws:3.3.4
-        && tail -f /opt/bitnami/spark/logs/*thriftserver*.out
-      "
-
-  airflow:
-    image: apache/airflow:2.8.0
-    container_name: airflow
-    networks: [pipeline]
-    ports:
-      - "8080:8080"
-    user: "50000:0"
-    environment:
-      AIRFLOW__CORE__EXECUTOR: SequentialExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
-      PYTHONPATH: /opt/airflow # ← dodaj to
-      SPARK_MASTER_URL: spark://spark-master:7077
-      MINIO_S3_ENDPOINT: http://minio:9000
-      _AIRFLOW_DB_MIGRATE: "true"
-      _AIRFLOW_WWW_USER_CREATE: "true"
-      _AIRFLOW_WWW_USER_USERNAME: admin
-      _AIRFLOW_WWW_USER_PASSWORD: admin
-    volumes:
-      - ./dags:/opt/airflow/dags
-      - ./src:/opt/airflow/src
-      - ./data:/opt/airflow/data
-      - airflow_db:/opt/airflow/logs
-    command: standalone
-    depends_on:
-      minio:
-        condition: service_healthy
-      kafka:
-        condition: service_started
-      spark-master:
-        condition: service_started
-
-  dashboard:
+  # ── Streamlit dashboard ───────────────────────────────────────────────
+  streamlit:
     build:
-      context: .
-      dockerfile: Dockerfile.dashboard
-    networks: [pipeline]
+      context: ..
+      dockerfile: src/interfaces/dashboard/Dockerfile
+    networks: [pipeline_net]
     ports:
       - "8501:8501"
     volumes:
-      - ./src/interfaces/dashboard:/app
-      - ./data:/app/data
-    command: streamlit run /app/app.py
+      - ../data:/app/data
+    environment:
+      WAREHOUSE_PATH: /app/data/warehouse.duckdb

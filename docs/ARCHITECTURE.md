@@ -1,38 +1,81 @@
 # Architecture
 
-For current maturity, known bugs, and what is not wired end-to-end, see [PROJECT_STATUS.md](./PROJECT_STATUS.md).
+For current maturity, known issues, and roadmap see [PROJECT_STATUS.md](./PROJECT_STATUS.md).
 
-## End-to-end flow
+## Data Flow
 
 ```mermaid
 flowchart TD
-  rawCsv[vehicles.csv] --> producer[KafkaProducer]
-  producer --> kafkaTopic[KafkaTopic_car_listings_raw]
+    CSV[vehicles.csv on disk]
+    Producer[Kafka Producer\nkafka/producer.py]
+    Topic[Kafka Topic\ncar-listings]
+    Databricks[Databricks Job\nBronze → Silver → Gold]
+    BronzeDelta[Bronze Delta\ndbfs:/pipelines/car-price/bronze/]
+    SilverDelta[Silver Delta\ndbfs:/pipelines/car-price/silver/]
+    GoldDelta[Gold Delta\ndbfs:/pipelines/car-price/gold/]
+    dbt[dbt-duckdb\nStaging + Marts]
+    Warehouse[DuckDB warehouse.duckdb]
+    Dashboard[Streamlit Dashboard\nlocalhost:8501]
+    Airflow[Airflow DAG\ncar_price_pipeline]
 
-  kafkaTopic --> sparkStreaming[SparkStructuredStreaming]
-  sparkStreaming --> bronze[Bronze_Delta_on_MinIO]
-
-  bronze --> silver[SparkBatch_Silver]
-  silver --> gold[dbt_DuckDB_Gold]
-
-  gold --> dashboard[StreamlitDashboard]
-  airflow[AirflowDAG] --> producer
-  airflow --> sparkStreaming
-  airflow --> silver
-  airflow --> gold
+    CSV --> Producer --> Topic
+    Topic --> Databricks
+    Databricks --> BronzeDelta --> SilverDelta --> GoldDelta
+    GoldDelta --> dbt --> Warehouse --> Dashboard
+    Airflow -->|orchestrates| Producer
+    Airflow -->|triggers| Databricks
+    Airflow -->|runs| dbt
 ```
 
-## Layers (Medallion)
+## Airflow DAG
 
-- **Bronze**: raw, append-only ingestion into Delta Lake on MinIO (S3-compatible)
-- **Silver**: cleaned + validated + deduplicated listings (business rule filtering)
-- **Gold**: dbt marts in DuckDB, optimized for analytics/dashboard queries
+```mermaid
+graph LR
+    A[produce_to_kafka] --> B[wait_for_kafka\n30s]
+    B --> C[databricks_pipeline\nRunNowOperator]
+    C --> D[dbt_run]
+    D --> E[dbt_test]
+    E --> F[notify_success]
+```
 
-## Why these tools (tradeoffs)
+## Medallion Architecture
 
-- **MinIO**: easy local S3-compatible store (swap to AWS S3/GCS in cloud)
-- **Delta Lake**: ACID + schema evolution + time travel semantics (production-like)
-- **DuckDB for Gold**: simple, fast local analytical warehouse (swap to BigQuery/Snowflake/Databricks SQL)
-- **Airflow**: orchestration and retry semantics (cloud analogs: MWAA/Composer)
-- **Kafka + streaming**: demonstrates event streaming and near-real-time ingestion patterns
+| Layer | Storage | Who writes | Content |
+|-------|---------|-----------|---------|
+| **Bronze** | Delta Lake on DBFS | Databricks notebook 01 | Raw events from Kafka, append-only, no transforms |
+| **Silver** | Delta Lake on DBFS | Databricks notebook 02 | Cleaned, filtered, deduplicated listings |
+| **Gold** | Delta Lake on DBFS | Databricks notebook 03 | Business aggregations: price by brand/year/condition |
+| **DuckDB** | Local `warehouse.duckdb` | dbt-duckdb | Mart tables for the dashboard |
 
+## Architecture Decisions
+
+### Why Kafka instead of reading CSV directly?
+
+Kafka decouples ingestion from processing. Any future source (web scraper, API, CDC feed)
+can publish to the same topic without changing downstream code. The Avro schema contract
+prevents silent schema drift.
+
+### Why Databricks instead of local Spark?
+
+Databricks manages the Spark cluster, Delta Lake, and DBFS. This eliminates the JVM/Maven
+setup cost locally and matches what production data engineering teams use. The trial workspace
+is free and sufficient for this dataset.
+
+### Why DuckDB as the serving layer?
+
+Gold Delta tables live in DBFS. dbt-duckdb reads them via `delta_scan()` and materialises
+mart tables in a local DuckDB file. The Streamlit dashboard reads from DuckDB — an in-process
+OLAP engine that needs no server. For a multi-user deployment, replace with Databricks SQL or
+Trino.
+
+### Why dbt instead of notebook transforms for the Gold layer?
+
+dbt provides: version-controlled SQL, automatic lineage, column-level tests, and readable
+documentation. Notebooks are better for exploratory work; dbt enforces production discipline.
+
+## Known Limitations
+
+- Gold layer in DBFS is not directly accessible from local DuckDB without Databricks DBFS
+  mount or DBFS REST API. For local development, run notebooks locally with `local[*]` Spark.
+- The pipeline is batch-oriented (`trigger(availableNow=True)`), not continuous streaming.
+- Single-node Databricks cluster — adequate for 350k rows, not for production scale.

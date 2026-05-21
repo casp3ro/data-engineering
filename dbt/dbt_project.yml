@@ -1,7 +1,7 @@
-name: car_price
+name: car_price_pipeline
 version: "1.0.0"
 config-version: 2
-profile: car_price
+profile: car_price_pipeline
 model-paths: ["models"]
 test-paths: ["tests"]
 macro-paths: ["macros"]
@@ -9,18 +9,16 @@ macro-paths: ["macros"]
 vars:
   min_price: 500
   max_price: 200000
-  min_year: 1990
-  max_year: 2024
+  min_year: 1980
+  max_year: 2025
   min_mileage: 0
   max_mileage: 500000
+  min_count: 50
   top_makes_limit: 10
 
 models:
-  car_price:
-    silver:
+  car_price_pipeline:
+    staging:
       +materialized: view
-      +file_format: delta
-    gold:
+    marts:
       +materialized: table
-      +file_format: delta
-      +location_root: s3a://gold

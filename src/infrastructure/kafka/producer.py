@@ -1,26 +1,23 @@
 import json
+import logging
 from typing import Iterator
 
-from kafka import KafkaProducer
+from confluent_kafka import Producer
+
+logger = logging.getLogger(__name__)
 
 TOPIC = "car_listings_raw"
 
 
 class ListingProducer:
     def __init__(self, bootstrap_servers: str = "localhost:9092") -> None:
-        self._producer = KafkaProducer(
-            bootstrap_servers=bootstrap_servers,
-            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
-            key_serializer=lambda k: k.encode("utf-8"),
-            acks="all",
-            retries=3,
-        )
+        self._producer = Producer({"bootstrap.servers": bootstrap_servers})
 
     def send(self, listing_dict: dict) -> None:
-        self._producer.send(
+        self._producer.produce(
             topic=TOPIC,
-            key=listing_dict["id"],
-            value=listing_dict,
+            key=listing_dict["id"].encode(),
+            value=json.dumps(listing_dict).encode("utf-8"),
         )
 
     def send_batch(self, listings: Iterator[dict]) -> int:
@@ -32,4 +29,4 @@ class ListingProducer:
         return count
 
     def close(self) -> None:
-        self._producer.close()
+        self._producer.flush()

@@ -1,15 +1,15 @@
-car_price:
-  target: local
+car_price_pipeline:
+  target: prod
   outputs:
-    local:
+    prod:
       type: duckdb
-      path: "../data/warehouse.duckdb"
+      path: "{{ env_var('WAREHOUSE_PATH', '../data/warehouse.duckdb') }}"
       threads: 4
       extensions:
         - httpfs
         - delta
       settings:
-        s3_endpoint: "{{ env_var('MINIO_ENDPOINT', 'localhost:9000') }}"
+        s3_endpoint: "{{ env_var('DATABRICKS_DBFS_ENDPOINT', 'localhost:9000') }}"
         s3_access_key_id: "{{ env_var('MINIO_ACCESS_KEY', 'minioadmin') }}"
         s3_secret_access_key: "{{ env_var('MINIO_SECRET_KEY', 'minioadmin') }}"
         s3_use_ssl: false

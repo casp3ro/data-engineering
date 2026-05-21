@@ -1,264 +1,185 @@
-# 🚗 Car Price Pipeline
+# Car Price Pipeline
 
-End-to-end data engineering project: ingest ~350k+ car listings (Craigslist), process them through a Medallion Architecture (Bronze → Silver → Gold), and serve insights via an interactive dashboard.
-
-**Runs fully locally on Docker** — no cloud account needed.
-
----
-
-## TL;DR (what to look at)
-
-- **Dashboard**: `http://localhost:8501` (Streamlit + Plotly)
-- **Airflow**: `http://localhost:8080` (DAG orchestration)
-- **MinIO console**: `http://localhost:9001` (S3-compatible object store)
-- **Kafka UI**: `http://localhost:8085` (streaming / topic inspection)
-- **Other exposed ports** (from `docker-compose.yml`): Kafka `9092`, Spark master `7077`, Spark Thrift `10000`
-- Deep dives: `docs/ARCHITECTURE.md`, `SECURITY.md`, `CONTRIBUTING.md`
-
-## Demo in 2 minutes
-
-Prereqs: Docker + Docker Compose, Python 3.11, Java (JDK), `uv`.
-
-```bash
-docker compose up -d
-uv sync
-
-export SPARK_MASTER_URL="local[*]"
-export MINIO_S3_ENDPOINT="http://localhost:9000"
-
-uv run python scripts/run_all.py
-uv run streamlit run src/interfaces/dashboard/app.py  # don't run if using the `dashboard` service in Docker (same :8501)
-```
-
-**You should see**:
-
-- Airflow UI at `http://localhost:8080`
-- Streamlit dashboard at `http://localhost:8501`
-
-## Screenshots
-
-- Dashboard: `docs/assets/dashboard.png` (add screenshot)
-- Airflow DAG: `docs/assets/airflow_dag.png` (add screenshot)
-
----
+End-to-end data engineering project: ingest ~350k Craigslist vehicle listings via Kafka, process through a Medallion Architecture on Databricks, and serve insights from a Streamlit dashboard.
 
 ## Architecture
 
 ```
 vehicles.csv
-     │
-     ▼
-┌─────────────────────────────────────┐
-│  BRONZE  · Apache Spark             │  Raw Delta Lake on MinIO (S3-compatible)
-│  s3a://bronze/listings              │  Immutable, append-only
-└─────────────────────────────────────┘
-     │
-     ▼
-┌─────────────────────────────────────┐
-│  SILVER  · Apache Spark             │  Cleaned, validated, deduplicated
-│  data/silver/listings               │  Parquet + business rule filters
-└─────────────────────────────────────┘
-     │
-     ▼
-┌─────────────────────────────────────┐
-│  GOLD    · dbt + DuckDB             │  Aggregated marts ready for BI
-│  data/warehouse.duckdb              │  Median price by make / year / state
-└─────────────────────────────────────┘
-     │
-     ▼
-📊 Streamlit Dashboard · http://localhost:8501
+    │
+    ▼
+[Kafka Producer] ──► [Kafka Topic: car-listings]
+                               │
+                               ▼
+                    [Databricks Job (DBR 14.3)]
+                    ┌──────────────────────────┐
+                    │  01_bronze_ingest         │  Kafka → Bronze Delta (DBFS)
+                    │  02_silver_transform      │  Clean + filter + deduplicate
+                    │  03_gold_aggregate        │  Business aggregations
+                    └──────────────────────────┘
+                               │
+                               ▼
+                    [dbt-duckdb] ──► [warehouse.duckdb]
+                                              │
+                                              ▼
+                                    [Streamlit Dashboard]
 ```
 
----
+Orchestrated by **Apache Airflow** (daily schedule, paused by default).
 
 ## Stack
 
-| Layer              | Technology                         |
-| ------------------ | ---------------------------------- |
-| Ingestion          | Apache Spark (PySpark)             |
-| Storage            | Delta Lake + MinIO (S3-compatible) |
-| Transformation     | Apache Spark + dbt-duckdb          |
-| Serving            | DuckDB                             |
-| Orchestration      | Apache Airflow                     |
-| Streaming          | Apache Kafka + Zookeeper           |
-| Dashboard          | Streamlit + Plotly                 |
-| Containerization   | Docker Compose                     |
-| Data validation    | Pydantic v2                        |
-| Testing            | Pytest + dbt tests                 |
-| Package management | uv                                 |
-
----
-
-## Dashboard
-
-- **KPI metrics** — total listings, unique makes, states covered, median price
-- **Bar chart** — median price by make (top 20)
-- **Line chart** — price depreciation curve by year per make
-- **Choropleth map** — median price by US state
-
----
-
-## Dataset
-
-[Craigslist Cars & Trucks — Austin Reese](https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data)
-
-~426k rows, 26 columns. Download `vehicles.csv` and place in `data/raw/vehicles.csv`.
-
----
-
-## Run modes
-
-### Quick demo (batch)
-
-Best for first-time users. Runs the batch pipeline locally (CSV → Bronze → Silver → dbt → DuckDB) and opens the dashboard.
-
-```bash
-docker compose up -d
-uv sync
-
-export SPARK_MASTER_URL="local[*]"
-export MINIO_S3_ENDPOINT="http://localhost:9000"
-
-uv run python scripts/run_all.py
-uv run streamlit run src/interfaces/dashboard/app.py  # don't run if using the `dashboard` service in Docker (same :8501)
-```
-
-### Full demo (end-to-end: streaming + orchestration)
-
-Runs the end-to-end DAG via Airflow (Kafka produce → Spark Structured Streaming to Bronze → Silver → dbt run/test).
-
-```bash
-docker compose up -d
-```
-
-Then:
-
-- Open **Airflow** at `http://localhost:8080` and trigger `car_price_pipeline`
-- Inspect Kafka messages in **Kafka UI** at `http://localhost:8085`
-- Inspect objects in **MinIO console** at `http://localhost:9001`
-- Open **Dashboard** at `http://localhost:8501`
-
----
+| Tool | Role | Version |
+|------|------|---------|
+| Apache Kafka | Event streaming — transport | 7.6.0 |
+| Avro / fastavro | Schema contract for events | 1.9.x |
+| Databricks | Distributed compute (Bronze/Silver/Gold) | DBR 14.3 LTS |
+| Delta Lake | Storage format — ACID, time travel | 3.x |
+| Apache Airflow | Orchestration — DAG, scheduling | 2.8.0 |
+| dbt-duckdb | SQL transformations, tests, lineage | 1.8.x |
+| DuckDB | Serving layer — analytics queries | 0.10+ |
+| Streamlit | Dashboard — end-user visualisation | 1.30+ |
+| Docker Compose | Local infra — Kafka + Airflow + Streamlit | — |
+| GitHub Actions | CI — lint, unit tests, dbt parse | — |
 
 ## Quick Start
 
-### Requirements
+### Prerequisites
 
 - Docker + Docker Compose
-- Python 3.11
-- Java (JDK) — required by PySpark: `brew install --cask temurin`
-- uv: `pip install uv`
+- Python 3.11+ and `uv`
+- Databricks workspace (free trial at databricks.com)
+- Kaggle account (for dataset download)
 
-### 1. Start infrastructure
+### 1. Clone and configure
 
 ```bash
-docker compose up -d
+git clone https://github.com/casp3ro/data-engineering.git
+cd data-engineering
+cp infra/.env.example .env
+# Edit .env — fill in DATABRICKS_HOST, DATABRICKS_TOKEN, and generate FERNET_KEY
 ```
 
-Services started:
+Generate required secrets:
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# paste output as AIRFLOW__CORE__FERNET_KEY
+python -c "import secrets; print(secrets.token_hex(32))"
+# paste output as AIRFLOW__WEBSERVER__SECRET_KEY
+```
 
-- MinIO (S3 API) → http://localhost:9000
-- MinIO Console → http://localhost:9001
-- Apache Spark → http://localhost:8081
-- Apache Airflow → http://localhost:8080
-- Kafka UI → http://localhost:8085
+### 2. Download dataset
 
-### 2. Install dependencies
+Download `vehicles.csv` from [Kaggle Craigslist Cars & Trucks](https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data)
+and place it at `data/raw/vehicles.csv`.
 
+### 3. Set up Databricks
+
+```bash
+# Install Databricks CLI
+pip install databricks-cli
+databricks configure --token
+
+# Upload notebooks
+databricks workspace import_dir databricks/notebooks /Repos/car-price-pipeline/databricks/notebooks --overwrite
+
+# Upload Avro schema to DBFS
+databricks fs cp kafka/schemas/listing.avsc dbfs:/pipelines/car-price/schemas/listing.avsc
+
+# Register the pipeline job
+JOB_ID=$(databricks jobs create --json-file databricks/jobs/pipeline_job.json | jq -r '.job_id')
+echo "DATABRICKS_JOB_ID=$JOB_ID" >> .env
+```
+
+Set up the Databricks connection in Airflow after starting the stack:
+- Connection ID: `databricks_default`
+- Type: `Databricks`
+- Host: your workspace URL
+- Token: your PAT
+
+Also add an Airflow Variable:
+- `DATABRICKS_JOB_ID`: the job ID from above
+- `CAR_PRICE_CSV_PATH`: `/opt/airflow/data/raw/vehicles.csv`
+
+### 4. Start local infrastructure
+
+```bash
+docker compose -f infra/docker-compose.yml up -d
+```
+
+Services:
+- Airflow UI: http://localhost:8080 (admin/admin)
+- Kafka UI: http://localhost:8085
+- Dashboard: http://localhost:8501
+
+### 5. Run the pipeline
+
+Via Airflow UI: unpause `car_price_pipeline` and trigger manually.
+
+Or manually:
 ```bash
 uv sync
+# Produce to Kafka
+uv run python -c "
+from pathlib import Path
+from kafka.config import KafkaConfig
+from kafka.producer import ListingProducer
+p = ListingProducer(KafkaConfig())
+print(p.produce_from_csv(Path('data/raw/vehicles.csv')))
+p.close()
+"
+# Then trigger the Databricks job via the workspace UI
 ```
 
-### 3. Run the pipeline
+## Pipeline Flow
+
+| Step | What happens | Typical duration |
+|------|-------------|-----------------|
+| `produce_to_kafka` | Reads CSV, validates ~350k rows via domain rules, publishes Avro events | ~3 min |
+| `wait_for_kafka` | 30s settle time for Kafka offsets | 30s |
+| `databricks_pipeline` | Bronze ingest → Silver clean → Gold aggregate on Databricks | ~8–15 min |
+| `dbt_run` | Reads Gold Delta, materialises DuckDB marts | ~30s |
+| `dbt_test` | Runs data quality tests | ~15s |
+
+## Development
 
 ```bash
-export SPARK_MASTER_URL="local[*]"
-export MINIO_S3_ENDPOINT="http://localhost:9000"
+uv sync --extra dev
 
-uv run python scripts/run_all.py
+# Run unit tests (no external services needed)
+uv run pytest tests/unit/ -v
+
+# Run integration tests (requires running Kafka)
+KAFKA_BOOTSTRAP_SERVERS=localhost:9092 uv run pytest tests/integration/ -m integration
+
+# Lint + type check
+uv run ruff check .
+uv run mypy src/ kafka/
+
+# dbt
+cd dbt && uv run dbt parse && uv run dbt compile
 ```
 
-Or step by step:
+### Adding a new Gold model
 
-```bash
-uv run python scripts/setup_minio.py       # create MinIO buckets
-uv run python scripts/ingest_to_bronze.py  # CSV → Bronze Delta (Spark)
-uv run python scripts/transform_silver.py  # Bronze → Silver (Spark)
-uv run python scripts/run_dbt.py           # Silver → Gold (dbt + DuckDB)
-```
+1. Add the aggregation to `databricks/notebooks/03_gold_aggregate.py`
+2. Add a staging model in `dbt/models/staging/stg_<name>.sql`
+3. Add a mart model in `dbt/models/marts/mart_<name>.sql`
+4. Add column tests in the model's `.yml` file
+5. Add a singular test in `dbt/tests/`
 
-### 4. Launch dashboard
+### Naming conventions
 
-```bash
-uv run streamlit run src/interfaces/dashboard/app.py
-```
+- dbt staging: `stg_<gold_table_name>.sql`
+- dbt marts: `mart_<business_concept>.sql`
+- Databricks notebooks: `NN_<layer>_<verb>.py`
+- Airflow tasks: `snake_case` verb-noun
 
-→ http://localhost:8501
+## Architecture Decisions
 
----
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full ADRs.
 
-## Project Structure
-
-```
-├── src/
-│   ├── domain/              # Business entities — Listing, Price, Mileage
-│   ├── application/         # Use cases — ingest, stream, transform
-│   ├── infrastructure/      # Spark, Kafka, MinIO clients
-│   └── interfaces/          # Streamlit dashboard, CLI
-├── dbt/
-│   ├── models/
-│   │   ├── silver/          # stg_listings, int_listings_valid
-│   │   └── gold/            # mart_price_by_make/year/state, mart_listings_summary
-│   └── macros/              # clean_string
-├── scripts/
-│   ├── run_all.py           # Full pipeline in one command
-│   ├── setup_minio.py       # Create Bronze/Silver/Gold buckets
-│   ├── ingest_to_bronze.py  # Spark CSV → Delta Lake
-│   ├── transform_silver.py  # Spark Bronze → Silver
-│   └── run_dbt.py           # dbt run + dbt test
-├── dags/
-│   └── car_price_pipeline.py  # Airflow DAG
-└── docker-compose.yml
-```
-
----
-
-## dbt Models
-
-```
-stg_listings          view    — raw Silver data, cleaned strings
-int_listings_valid    table   — filtered by business rules (price $500–$200k, year 1990–2024)
-mart_price_by_make    table   — median/avg/min/max price per make (min 50 listings)
-mart_price_by_year    table   — price depreciation curve, top 10 makes
-mart_price_by_state   table   — median price per US state
-mart_listings_summary table   — single-row KPI summary
-```
-
-### dbt tests
-
-```
-assert_price_positive       — no negative prices
-not_null_stg_listings_id    — id always present
-not_null_stg_listings_make  — make always present
-not_null_stg_listings_price — price always present
-unique_stg_listings_id      — no duplicate listings
-```
-
----
-
-## Design Patterns
-
-- **Medallion Architecture** — Bronze (raw) → Silver (clean) → Gold (aggregated)
-- **Domain-Driven Design** — `Listing`, `Price`, `Mileage` as domain entities with Pydantic validation
-- **Repository Pattern** — storage abstraction decoupled from business logic
-- **Idempotency** — all pipeline steps safe to re-run
-
----
-
-## Links
-
-- Dataset: [Craigslist Cars & Trucks — Austin Reese](https://www.kaggle.com/datasets/austinreese/craigslist-carstrucks-data)
-- Delta Lake: https://delta.io
-- dbt docs: https://docs.getdbt.com
-- MinIO: https://min.io
-- fast.ai (ML companion): https://course.fast.ai
+- **Kafka over direct file read**: decouples ingestion from processing, enforces schema contract via Avro
+- **Databricks over local Spark**: eliminates JVM/Maven setup, matches production DE tooling
+- **DuckDB as serving layer**: zero-server OLAP, reads Delta directly via `delta_scan()`, fast for dashboards
+- **dbt over notebook transforms**: version-controlled SQL, lineage, column tests, readable docs

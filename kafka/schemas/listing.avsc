@@ -1,0 +1,22 @@
+{
+  "type": "record",
+  "name": "Listing",
+  "namespace": "com.carprice.listings",
+  "doc": "Craigslist vehicle listing event — single schema contract for all pipeline paths",
+  "fields": [
+    {"name": "id",           "type": "string"},
+    {"name": "price",        "type": "double"},
+    {"name": "year",         "type": "int"},
+    {"name": "manufacturer", "type": "string"},
+    {"name": "model",        "type": "string"},
+    {"name": "condition",    "type": "string"},
+    {"name": "fuel",         "type": "string"},
+    {"name": "mileage",      "type": ["null", "double"], "default": null},
+    {"name": "transmission", "type": "string"},
+    {"name": "drive",        "type": "string"},
+    {"name": "state",        "type": "string"},
+    {"name": "lat",          "type": ["null", "double"], "default": null},
+    {"name": "long",         "type": ["null", "double"], "default": null},
+    {"name": "ingested_at",  "type": "string", "doc": "ISO 8601 timestamp"}
+  ]
+}

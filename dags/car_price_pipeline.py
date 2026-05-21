@@ -1,56 +1,57 @@
+"""
+DAG: car_price_pipeline
+Role: orchestrates the full Kafka → Databricks → dbt pipeline on a daily schedule.
+
+Task order:
+  produce_to_kafka → wait_for_kafka → databricks_pipeline → dbt_run → dbt_test → notify_success
+"""
+from __future__ import annotations
+
 import logging
+import os
 from datetime import datetime, timedelta
 
 from airflow import DAG
+from airflow.models import Variable
 from airflow.operators.bash import BashOperator
 from airflow.operators.python import PythonOperator
+from airflow.providers.databricks.operators.databricks import DatabricksRunNowOperator
+from airflow.sensors.time_delta import TimeDeltaSensor
 
 logger = logging.getLogger(__name__)
 
 default_args = {
-    "owner": "kacper",
+    "owner": "data-engineering",
     "retries": 2,
-    "retry_delay": timedelta(minutes=3),
+    "retry_delay": timedelta(minutes=5),
     "email_on_failure": False,
 }
 
 
-def _produce() -> None:
-    import os
+def _produce_to_kafka(**context: object) -> None:
     from pathlib import Path
 
-    from src.application.produce_listings import ProduceListings
-    from src.infrastructure.kafka.producer import ListingProducer
+    from kafka.config import KafkaConfig
+    from kafka.producer import ListingProducer
 
-    bootstrap = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
-    producer = ListingProducer(bootstrap_servers=bootstrap)
-    result = ProduceListings(producer).execute(Path("/opt/airflow/data/raw/vehicles.csv"))
-    logger.info("Kafka produce: %s", result)
+    csv_path = Path(Variable.get("CAR_PRICE_CSV_PATH", default_var=os.getenv("CAR_PRICE_CSV_PATH", "")))
+    config = KafkaConfig()
+    producer = ListingProducer(config)
+    result = producer.produce_from_csv(csv_path)
     producer.close()
+    logger.info("Kafka produce complete: %s", result)
+    context["ti"].xcom_push(key="produce_result", value={"success": result.success_count, "errors": result.error_count})
 
 
-def _spark_bronze() -> None:
-    from src.application.stream_to_bronze import StreamToBronze
-    from src.infrastructure.spark.session import get_spark_session
-
-    spark = get_spark_session(app_name="car_price_pipeline_bronze")
-    try:
-        StreamToBronze(spark).run()
-    finally:
-        spark.stop()
-
-
-def _spark_silver() -> None:
-    from src.application.transform_silver import TransformSilver
-    from src.infrastructure.spark.delta_writer import DeltaWriter
-    from src.infrastructure.spark.session import get_spark_session
-
-    spark = get_spark_session(app_name="car_price_pipeline_silver")
-    try:
-        result = TransformSilver(spark, DeltaWriter()).execute()
-        logger.info("Transform silver: %s", result)
-    finally:
-        spark.stop()
+def _notify_success(**context: object) -> None:
+    ti = context["ti"]
+    produce = ti.xcom_pull(task_ids="produce_to_kafka", key="produce_result") or {}
+    logger.info(
+        "Pipeline complete — produced=%s errors=%s dag_run=%s",
+        produce.get("success"),
+        produce.get("errors"),
+        context.get("run_id"),
+    )
 
 
 with DAG(
@@ -59,31 +60,44 @@ with DAG(
     start_date=datetime(2024, 1, 1),
     schedule="@daily",
     catchup=False,
-    tags=["portfolio", "de", "spark", "kafka"],
+    is_paused_upon_creation=True,
+    tags=["car-price", "production", "databricks"],
+    doc_md=__doc__,
 ) as dag:
-    kafka_produce = PythonOperator(
-        task_id="kafka_produce",
-        python_callable=_produce,
+
+    produce_to_kafka = PythonOperator(
+        task_id="produce_to_kafka",
+        python_callable=_produce_to_kafka,
     )
 
-    spark_bronze = PythonOperator(
-        task_id="spark_bronze",
-        python_callable=_spark_bronze,
+    # Give Kafka 30s to settle before triggering Databricks streaming ingest
+    wait_for_kafka = TimeDeltaSensor(
+        task_id="wait_for_kafka",
+        delta=timedelta(seconds=30),
     )
 
-    spark_silver = PythonOperator(
-        task_id="spark_silver",
-        python_callable=_spark_silver,
+    databricks_pipeline = DatabricksRunNowOperator(
+        task_id="databricks_pipeline",
+        databricks_conn_id="databricks_default",
+        job_id="{{ var.value.DATABRICKS_JOB_ID }}",
+        wait_for_termination=True,
+        polling_period_seconds=30,
     )
 
     dbt_run = BashOperator(
         task_id="dbt_run",
-        bash_command="cd /opt/airflow/dbt && dbt run --profiles-dir .",
+        bash_command="cd /opt/airflow/dbt && dbt run --profiles-dir . --target prod",
     )
 
     dbt_test = BashOperator(
         task_id="dbt_test",
-        bash_command="cd /opt/airflow/dbt && dbt test --profiles-dir .",
+        bash_command="cd /opt/airflow/dbt && dbt test --profiles-dir . --target prod",
+        trigger_rule="all_success",
     )
 
-    kafka_produce >> spark_bronze >> spark_silver >> dbt_run >> dbt_test
+    notify_success = PythonOperator(
+        task_id="notify_success",
+        python_callable=_notify_success,
+    )
+
+    produce_to_kafka >> wait_for_kafka >> databricks_pipeline >> dbt_run >> dbt_test >> notify_success

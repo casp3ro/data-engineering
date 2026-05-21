@@ -95,7 +95,7 @@ def test_filter_removes_price_above_maximum(ts: TransformSilver, spark: SparkSes
 @pytest.mark.spark
 def test_filter_removes_year_before_minimum(ts: TransformSilver, spark: SparkSession) -> None:
     rows = [
-        ("1", "toyota", "camry", 1985, 15000.0, 50000, "ca"),  # too old
+        ("1", "toyota", "camry", 1970, 15000.0, 50000, "ca"),  # too old (MIN_YEAR=1980)
         ("2", "honda",  "civic", 2019, 15000.0, 30000, "ny"),  # valid
     ]
     result = ts._filter(_df(spark, rows))
