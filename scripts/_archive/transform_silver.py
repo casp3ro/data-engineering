@@ -11,7 +11,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from src.domain.constants import EXCLUDED_MAKES, MAX_MILEAGE, MAX_PRICE, MAX_YEAR, MIN_MILEAGE, MIN_PRICE, MIN_YEAR
+from src.domain.constants import (
+    EXCLUDED_MAKES,
+    MAX_MILEAGE,
+    MAX_PRICE,
+    MAX_YEAR,
+    MIN_MILEAGE,
+    MIN_PRICE,
+    MIN_YEAR,
+)
 from src.infrastructure.spark.session import get_spark_session
 
 logger = logging.getLogger(__name__)

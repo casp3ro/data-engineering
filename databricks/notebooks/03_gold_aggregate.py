@@ -16,10 +16,13 @@ from pyspark.sql.functions import (
     col,
     count,
     current_timestamp,
-    lit,
-    max as spark_max,
-    min as spark_min,
     percentile_approx,
+)
+from pyspark.sql.functions import (
+    max as spark_max,
+)
+from pyspark.sql.functions import (
+    min as spark_min,
 )
 
 SILVER_PATH = "dbfs:/pipelines/car-price/silver/listings/"

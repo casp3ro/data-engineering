@@ -2,15 +2,12 @@
 from __future__ import annotations
 
 import csv
-import io
-import json
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from kafka.config import KafkaConfig
-
 
 # ── helpers ──────────────────────────────────────────────────────────────
 

@@ -3,7 +3,13 @@ from unittest.mock import MagicMock
 
 import pytest
 from pyspark.sql import SparkSession
-from pyspark.sql.types import DoubleType, IntegerType, StringType, StructField, StructType
+from pyspark.sql.types import (
+    DoubleType,
+    IntegerType,
+    StringType,
+    StructField,
+    StructType,
+)
 
 from src.application.transform_silver import TransformSilver
 

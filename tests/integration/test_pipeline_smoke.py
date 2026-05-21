@@ -5,13 +5,10 @@ Skipped automatically when KAFKA_BOOTSTRAP_SERVERS is not set.
 """
 from __future__ import annotations
 
-import io
-import json
 import os
 import time
 from datetime import datetime, timezone
 
-import fastavro
 import pytest
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "")
@@ -21,7 +18,8 @@ TOPIC = os.getenv("KAFKA_TOPIC", "car-listings-smoke-test")
 @pytest.mark.integration
 @pytest.mark.skipif(not KAFKA_BOOTSTRAP_SERVERS, reason="KAFKA_BOOTSTRAP_SERVERS not set")
 def test_produce_and_consume_smoke() -> None:
-    from confluent_kafka import Consumer, Producer
+    from confluent_kafka import Consumer
+
     from kafka.config import KafkaConfig
     from kafka.producer import ListingProducer
 

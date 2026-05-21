@@ -1,7 +1,15 @@
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
-from src.domain.constants import EXCLUDED_MAKES, MAX_MILEAGE, MAX_PRICE, MAX_YEAR, MIN_MILEAGE, MIN_PRICE, MIN_YEAR
+from src.domain.constants import (
+    EXCLUDED_MAKES,
+    MAX_MILEAGE,
+    MAX_PRICE,
+    MAX_YEAR,
+    MIN_MILEAGE,
+    MIN_PRICE,
+    MIN_YEAR,
+)
 from src.infrastructure.spark.delta_writer import DeltaWriter
 
 BRONZE_PATH = "s3a://bronze/listings"
