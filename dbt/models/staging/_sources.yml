@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    description: "Surowe dane zaladowane z CSV przez scripts/load_raw.py"
+    tables:
+      - name: users
+        description: "Jeden wiersz na uzytkownika (rejestracja)."
+      - name: events
+        description: "Strumien zdarzen produktowych (signup, app_opened, lesson_*, streak_extended)."
+      - name: subscriptions
+        description: "Subskrypcje platne; cancelled_ts NULL = aktywna."

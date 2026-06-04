@@ -1,0 +1,42 @@
+name: car_price_pipeline
+version: "1.0.0"
+config-version: 2
+profile: car_price_pipeline
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+
+vars:
+  pipeline_mode: "{{ env_var('PIPELINE_MODE', 'local') }}"
+  min_price: 500
+  max_price: 200000
+  min_year: 1980
+  max_year: 2025
+  min_mileage: 0
+  max_mileage: 500000
+  min_count: 50
+  top_makes_limit: 10
+  delta_paths:
+    local:
+      silver_listings: "s3://silver/listings"
+    databricks:
+      silver_listings: "s3://gold/export/silver_listings"
+      gold_price_by_brand: "s3://gold/price_by_brand/"
+      gold_price_by_year: "s3://gold/price_by_year/"
+      gold_price_by_condition: "s3://gold/price_by_condition/"
+      gold_listings_summary: "s3://gold/listings_summary/"
+      gold_price_by_state: "s3://gold/price_by_state/"
+      gold_price_by_make_year: "s3://gold/price_by_make_year/"
+
+models:
+  car_price_pipeline:
+    silver:
+      +enabled: "{{ var('pipeline_mode', 'local') == 'local' }}"
+    staging:
+      +materialized: view
+      +enabled: "{{ var('pipeline_mode', 'local') == 'databricks' }}"
+    marts:
+      +materialized: table
+      +enabled: "{{ var('pipeline_mode', 'local') == 'databricks' }}"
+    gold:
+      +materialized: table

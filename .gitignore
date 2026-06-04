@@ -217,8 +217,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-data
-data/*
+
 metastore_db/
 spark-warehouse/
 docs/private
+.agents
+skills-lock.json

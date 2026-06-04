@@ -1,0 +1,20 @@
+FROM apache/airflow:2.8.0-python3.11
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+RUN pip install --no-cache-dir \
+    "apache-airflow-providers-databricks==4.7.0" \
+    "dbt-duckdb==1.8.4" \
+    "protobuf<5.0" \
+    "confluent-kafka[avro]==2.3.0" \
+    "fastavro==1.9.4" \
+    "pydantic==2.13.3" \
+    "pyspark==3.5.0" \
+    "delta-spark==3.2.0" \
+    "minio>=7.2.0"
+
+ENV PYTHONPATH=/opt/airflow
+ENV PATH=/home/airflow/.local/bin:$PATH
